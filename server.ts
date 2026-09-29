@@ -12,17 +12,22 @@ const PORT = 3000;
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
 
-// In-memory persistent state
+// In-memory persistent state & dynamic credentials
+let dynamicWhatsAppToken = process.env.WHATSAPP_TOKEN?.trim() || "";
+let dynamicPhoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() || "";
+let dynamicApiVersion = process.env.WHATSAPP_API_VERSION?.trim() || "v21.0";
+let dynamicBusinessAccountId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID?.trim() || "";
+
 const campaigns = new Map<string, Campaign>();
 const activeDispatchers = new Map<string, { timer?: NodeJS.Timeout; isRunning: boolean; abortController: AbortController }>();
 const sseClients = new Map<string, Set<Response>>();
 
-// WhatsApp Meta Cloud API config from environment variables
+// WhatsApp Meta Cloud API config
 const getWhatsAppConfig = () => {
-  const token = process.env.WHATSAPP_TOKEN?.trim() || "";
-  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID?.trim() || "";
-  const apiVersion = process.env.WHATSAPP_API_VERSION?.trim() || "v21.0";
-  const businessAccountId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID?.trim() || "";
+  const token = dynamicWhatsAppToken;
+  const phoneNumberId = dynamicPhoneNumberId;
+  const apiVersion = dynamicApiVersion;
+  const businessAccountId = dynamicBusinessAccountId;
   const isConfigured = Boolean(token && phoneNumberId);
 
   return {
@@ -365,12 +370,51 @@ app.get("/api/health", (req: Request, res: Response) => {
     status: "ok",
     whatsappConfigured: config.isConfigured,
     mode: config.mode,
-    phoneNumberId: config.phoneNumberId ? `***${config.phoneNumberId.slice(-4)}` : undefined,
+    phoneNumberId: config.phoneNumberId ? `${config.phoneNumberId.slice(0, 4)}...${config.phoneNumberId.slice(-4)}` : undefined,
     apiVersion: config.apiVersion,
     activeCampaignsCount: Array.from(campaigns.values()).filter((c) => c.status === "running").length,
     timestamp: new Date().toISOString(),
   };
   res.json(response);
+});
+
+// 1.1 Get current credentials configuration (masked token)
+app.get("/api/config", (req: Request, res: Response) => {
+  const config = getWhatsAppConfig();
+  res.json({
+    phoneNumberId: config.phoneNumberId,
+    apiVersion: config.apiVersion,
+    businessAccountId: config.businessAccountId,
+    hasToken: Boolean(config.token),
+    tokenMasked: config.token ? `${config.token.slice(0, 7)}...${config.token.slice(-6)}` : "",
+    isConfigured: config.isConfigured,
+    mode: config.mode,
+  });
+});
+
+// 1.2 Save credentials directly from UI
+app.post("/api/config", (req: Request, res: Response) => {
+  const { token, phoneNumberId, apiVersion, businessAccountId } = req.body;
+  if (typeof token === "string" && token.trim()) {
+    dynamicWhatsAppToken = token.trim();
+  }
+  if (typeof phoneNumberId === "string") {
+    dynamicPhoneNumberId = phoneNumberId.trim();
+  }
+  if (typeof apiVersion === "string" && apiVersion.trim()) {
+    dynamicApiVersion = apiVersion.trim();
+  }
+  if (typeof businessAccountId === "string") {
+    dynamicBusinessAccountId = businessAccountId.trim();
+  }
+
+  const config = getWhatsAppConfig();
+  res.json({
+    success: true,
+    isConfigured: config.isConfigured,
+    mode: config.mode,
+    phoneNumberId: config.phoneNumberId,
+  });
 });
 
 // 2. List all campaigns

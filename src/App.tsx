@@ -2,17 +2,18 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Header } from './components/Header';
 import { CampaignForm } from './components/CampaignForm';
 import { CampaignMonitor } from './components/CampaignMonitor';
+import { SetupWizard } from './components/SetupWizard';
 import { TestMessageModal } from './components/TestMessageModal';
 import { ApiConfigModal } from './components/ApiConfigModal';
 import { CampaignHistoryModal } from './components/CampaignHistoryModal';
 import { Campaign, HealthResponse } from './types';
-import { PlusCircle, BarChart3, AlertTriangle, ShieldCheck, Sparkles, MessageSquare } from 'lucide-react';
+import { PlusCircle, BarChart3, AlertTriangle, ShieldCheck, Sparkles, MessageSquare, Wand2 } from 'lucide-react';
 
 export default function App() {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [currentCampaignId, setCurrentCampaignId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'monitor' | 'create'>('monitor');
+  const [viewMode, setViewMode] = useState<'monitor' | 'create' | 'wizard'>('wizard');
   const [isLoading, setIsLoading] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
 
@@ -292,9 +293,21 @@ export default function App() {
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-[#dedbd3] shadow-xs">
             <button
+              onClick={() => setViewMode('wizard')}
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
+                viewMode === 'wizard'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'text-emerald-800 bg-emerald-50 hover:bg-emerald-100/70 border border-emerald-200'
+              }`}
+            >
+              <Wand2 className="w-3.5 h-3.5 text-emerald-200" />
+              <span>Asistente Guiado</span>
+            </button>
+
+            <button
               onClick={() => setViewMode('monitor')}
               disabled={!currentCampaign}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer disabled:opacity-40 ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition cursor-pointer disabled:opacity-40 ${
                 viewMode === 'monitor'
                   ? 'bg-[#111827] text-white shadow-xs'
                   : 'text-[#4b5563] hover:text-[#111827]'
@@ -306,14 +319,14 @@ export default function App() {
 
             <button
               onClick={() => setViewMode('create')}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold transition cursor-pointer ${
                 viewMode === 'create'
                   ? 'bg-[#111827] text-white shadow-xs'
                   : 'text-[#4b5563] hover:text-[#111827]'
               }`}
             >
               <PlusCircle className="w-3.5 h-3.5 text-[#25D366]" />
-              <span>Nueva Campaña</span>
+              <span>Formulario Avanzado</span>
             </button>
           </div>
 
@@ -335,7 +348,30 @@ export default function App() {
         </div>
 
         {/* View Content */}
-        {viewMode === 'create' || !currentCampaign ? (
+        {viewMode === 'wizard' ? (
+          <SetupWizard
+            onComplete={async (data) => {
+              if (data.credentials?.phoneNumberId) {
+                await fetch('/api/config', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(data.credentials),
+                });
+                await checkHealth();
+              }
+              await handleCreateCampaign({
+                name: data.campaignName,
+                templateName: data.templateName,
+                languageCode: data.languageCode,
+                variables: data.variables,
+                contacts: data.contacts,
+                settings: data.settings,
+              });
+            }}
+            onCancel={() => setViewMode(currentCampaign ? 'monitor' : 'create')}
+            initialPhoneNumberId="1256380654232561"
+          />
+        ) : viewMode === 'create' || !currentCampaign ? (
           <CampaignForm
             onCreateCampaign={handleCreateCampaign}
             onOpenTestModal={handleOpenTestModal}
@@ -392,6 +428,9 @@ export default function App() {
         isOpen={isConfigModalOpen}
         onClose={() => setIsConfigModalOpen(false)}
         health={health}
+        onConfigUpdated={() => {
+          checkHealth();
+        }}
       />
 
       <CampaignHistoryModal
