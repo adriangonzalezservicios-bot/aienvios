@@ -1,0 +1,6 @@
+{
+  "name": "AKARI · WhatsApp Campaigns",
+  "description": "Gestor y despachador robusto de campañas automáticas de WhatsApp con plantillas oficiales, control de ritmo prudente, métricas en vivo y modo seguro.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
